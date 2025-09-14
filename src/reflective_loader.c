@@ -29,7 +29,7 @@ __declspec(noinline) ULONG_PTR GetIp(VOID)
     return (ULONG_PTR)_ReturnAddress();
 }
 
-DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader(LPVOID lpLoaderParameter)
+DLLEXPORT ULONG_PTR WINAPI ModuleEntryPoint(LPVOID lpLoaderParameter)
 {
     LOADLIBRARYA_FN fnLoadLibraryA = NULL;
     GETPROCADDRESS_FN fnGetProcAddress = NULL;

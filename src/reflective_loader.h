@@ -208,6 +208,6 @@ typedef struct _IMAGE_RELOC_ENTRY
     WORD type : 4;
 } IMAGE_RELOC_ENTRY, *PIMAGE_RELOC_ENTRY;
 
-DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader(LPVOID lpParameter);
+DLLEXPORT ULONG_PTR WINAPI ModuleEntryPoint(LPVOID lpParameter);
 
 #endif

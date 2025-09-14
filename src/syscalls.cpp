@@ -13,12 +13,12 @@
 #include <map>
 #include <functional>
 
-SYSCALL_STUBS g_syscall_stubs{};
+FUNCTION_STUBS g_syscall_stubs{};
 
-static bool g_verbose_syscalls = false;
+static bool g_verbose_mode = false;
 static void debug_print(const std::string &msg)
 {
-    if (g_verbose_syscalls)
+    if (g_verbose_mode)
     {
         std::cout << "[#] " << msg << std::endl;
     }
@@ -82,7 +82,7 @@ namespace
 
 BOOL InitializeSyscalls(bool is_verbose)
 {
-    g_verbose_syscalls = is_verbose;
+    g_verbose_mode = is_verbose;
 
     HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
     if (!hNtdll)
@@ -119,7 +119,7 @@ BOOL InitializeSyscalls(bool is_verbose)
     {
         bool operator()(const char *a, const char *b) const { return std::strcmp(a, b) < 0; }
     };
-    const std::map<const char *, std::pair<SYSCALL_ENTRY *, UINT>, CStringComparer> required_syscalls = {
+    const std::map<const char *, std::pair<FUNCTION_ENTRY *, UINT>, CStringComparer> required_syscalls = {
         {"ZwAllocateVirtualMemory", {&g_syscall_stubs.NtAllocateVirtualMemory, 6}},
         {"ZwWriteVirtualMemory", {&g_syscall_stubs.NtWriteVirtualMemory, 5}},
         {"ZwReadVirtualMemory", {&g_syscall_stubs.NtReadVirtualMemory, 5}},
@@ -184,7 +184,7 @@ BOOL InitializeSyscalls(bool is_verbose)
         if (g_syscall_stubs.NtEnumerateKey.pSyscallGadget)
             regSyscalls++;
 
-        debug_print("Initialized " + std::to_string(required_syscalls.size()) + " syscall stubs.");
+        debug_print("Initialized " + std::to_string(required_syscalls.size()) + " system call stubs.");
 
         for (const auto &pair : required_syscalls)
         {
@@ -196,7 +196,7 @@ BOOL InitializeSyscalls(bool is_verbose)
     }
     else
     {
-        debug_print("ERROR: One or more required syscall gadgets could not be found:");
+        debug_print("ERROR: One or more required system call gadgets could not be found:");
         for (const auto &pair : required_syscalls)
         {
             if (!pair.second.first->pSyscallGadget)

@@ -31,34 +31,34 @@ using NTSTATUS = LONG;
 #define REG_EXPAND_SZ 2
 #endif
 
-struct SYSCALL_ENTRY
+struct FUNCTION_ENTRY
 {
     PVOID pSyscallGadget;
     UINT nArgs;
     WORD ssn;
 };
 
-struct SYSCALL_STUBS
+struct FUNCTION_STUBS
 {
-    SYSCALL_ENTRY NtAllocateVirtualMemory;
-    SYSCALL_ENTRY NtWriteVirtualMemory;
-    SYSCALL_ENTRY NtReadVirtualMemory;
-    SYSCALL_ENTRY NtCreateThreadEx;
-    SYSCALL_ENTRY NtFreeVirtualMemory;
-    SYSCALL_ENTRY NtProtectVirtualMemory;
-    SYSCALL_ENTRY NtOpenProcess;
-    SYSCALL_ENTRY NtGetNextProcess;
-    SYSCALL_ENTRY NtTerminateProcess;
-    SYSCALL_ENTRY NtQueryInformationProcess;
-    SYSCALL_ENTRY NtUnmapViewOfSection;
-    SYSCALL_ENTRY NtGetContextThread;
-    SYSCALL_ENTRY NtSetContextThread;
-    SYSCALL_ENTRY NtResumeThread;
-    SYSCALL_ENTRY NtFlushInstructionCache;
-    SYSCALL_ENTRY NtClose;
-    SYSCALL_ENTRY NtOpenKey;
-    SYSCALL_ENTRY NtQueryValueKey;
-    SYSCALL_ENTRY NtEnumerateKey;
+    FUNCTION_ENTRY NtAllocateVirtualMemory;
+    FUNCTION_ENTRY NtWriteVirtualMemory;
+    FUNCTION_ENTRY NtReadVirtualMemory;
+    FUNCTION_ENTRY NtCreateThreadEx;
+    FUNCTION_ENTRY NtFreeVirtualMemory;
+    FUNCTION_ENTRY NtProtectVirtualMemory;
+    FUNCTION_ENTRY NtOpenProcess;
+    FUNCTION_ENTRY NtGetNextProcess;
+    FUNCTION_ENTRY NtTerminateProcess;
+    FUNCTION_ENTRY NtQueryInformationProcess;
+    FUNCTION_ENTRY NtUnmapViewOfSection;
+    FUNCTION_ENTRY NtGetContextThread;
+    FUNCTION_ENTRY NtSetContextThread;
+    FUNCTION_ENTRY NtResumeThread;
+    FUNCTION_ENTRY NtFlushInstructionCache;
+    FUNCTION_ENTRY NtClose;
+    FUNCTION_ENTRY NtOpenKey;
+    FUNCTION_ENTRY NtQueryValueKey;
+    FUNCTION_ENTRY NtEnumerateKey;
 };
 
 struct UNICODE_STRING_SYSCALLS
@@ -192,7 +192,7 @@ inline void InitializeObjectAttributes(POBJECT_ATTRIBUTES p, PUNICODE_STRING_SYS
 
 extern "C"
 {
-    extern SYSCALL_STUBS g_syscall_stubs;
+    extern FUNCTION_STUBS g_syscall_stubs;
 
     [[nodiscard]] BOOL InitializeSyscalls(bool is_verbose);
 

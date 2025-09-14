@@ -3,6 +3,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 #include "syscalls.h"
+#include "string_obfuscation.h"
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -12,6 +13,9 @@
 #include <iomanip>
 #include <map>
 #include <functional>
+#include <random>
+#include <thread>
+#include <chrono>
 
 SYSCALL_STUBS g_syscall_stubs{};
 
@@ -83,11 +87,22 @@ namespace
 BOOL InitializeSyscalls(bool is_verbose)
 {
     g_verbose_syscalls = is_verbose;
+    
+    // Add some entropy and timing variation
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(10, 100);
+    std::this_thread::sleep_for(std::chrono::milliseconds(dis(gen)));
 
-    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+    // Obfuscated module name
+    TEMP_STR(ntdll_name, "ntdll.dll");
+    std::wstring wntdll_name(ntdll_name.begin(), ntdll_name.end());
+    
+    HMODULE hNtdll = GetModuleHandleW(wntdll_name.c_str());
     if (!hNtdll)
     {
-        debug_print("GetModuleHandleW for ntdll.dll failed.");
+        TEMP_STR(err_msg, "GetModuleHandleW for system library failed.");
+        debug_print(err_msg);
         return FALSE;
     }
 
@@ -102,10 +117,13 @@ BOOL InitializeSyscalls(bool is_verbose)
     std::vector<SORTED_SYSCALL_MAPPING> sortedSyscalls;
     sortedSyscalls.reserve(pExportDir->NumberOfNames);
 
+    // Obfuscated prefix check
+    TEMP_STR(prefix, "Zw");
+    
     for (DWORD i = 0; i < pExportDir->NumberOfNames; ++i)
     {
         LPCSTR szFuncName = reinterpret_cast<LPCSTR>(reinterpret_cast<PBYTE>(hNtdll) + pNameRvas[i]);
-        if (strncmp(szFuncName, "Zw", 2) == 0)
+        if (strncmp(szFuncName, prefix.c_str(), 2) == 0)
         {
             PVOID pFuncAddress = reinterpret_cast<PVOID>(reinterpret_cast<PBYTE>(hNtdll) + pAddressRvas[pOrdinalRvas[i]]);
             sortedSyscalls.push_back({pFuncAddress, szFuncName});
@@ -115,30 +133,29 @@ BOOL InitializeSyscalls(bool is_verbose)
     std::sort(sortedSyscalls.begin(), sortedSyscalls.end(), CompareSyscallMappings);
     debug_print("Found and sorted " + std::to_string(sortedSyscalls.size()) + " Zw* functions.");
 
-    struct CStringComparer
-    {
-        bool operator()(const char *a, const char *b) const { return std::strcmp(a, b) < 0; }
-    };
-    const std::map<const char *, std::pair<SYSCALL_ENTRY *, UINT>, CStringComparer> required_syscalls = {
-        {"ZwAllocateVirtualMemory", {&g_syscall_stubs.NtAllocateVirtualMemory, 6}},
-        {"ZwWriteVirtualMemory", {&g_syscall_stubs.NtWriteVirtualMemory, 5}},
-        {"ZwReadVirtualMemory", {&g_syscall_stubs.NtReadVirtualMemory, 5}},
-        {"ZwCreateThreadEx", {&g_syscall_stubs.NtCreateThreadEx, 11}},
-        {"ZwFreeVirtualMemory", {&g_syscall_stubs.NtFreeVirtualMemory, 4}},
-        {"ZwProtectVirtualMemory", {&g_syscall_stubs.NtProtectVirtualMemory, 5}},
-        {"ZwOpenProcess", {&g_syscall_stubs.NtOpenProcess, 4}},
-        {"ZwGetNextProcess", {&g_syscall_stubs.NtGetNextProcess, 5}},
-        {"ZwTerminateProcess", {&g_syscall_stubs.NtTerminateProcess, 2}},
-        {"ZwQueryInformationProcess", {&g_syscall_stubs.NtQueryInformationProcess, 5}},
-        {"ZwUnmapViewOfSection", {&g_syscall_stubs.NtUnmapViewOfSection, 2}},
-        {"ZwGetContextThread", {&g_syscall_stubs.NtGetContextThread, 2}},
-        {"ZwSetContextThread", {&g_syscall_stubs.NtSetContextThread, 2}},
-        {"ZwResumeThread", {&g_syscall_stubs.NtResumeThread, 2}},
-        {"ZwFlushInstructionCache", {&g_syscall_stubs.NtFlushInstructionCache, 3}},
-        {"ZwClose", {&g_syscall_stubs.NtClose, 1}},
-        {"ZwOpenKey", {&g_syscall_stubs.NtOpenKey, 3}},
-        {"ZwQueryValueKey", {&g_syscall_stubs.NtQueryValueKey, 6}},
-        {"ZwEnumerateKey", {&g_syscall_stubs.NtEnumerateKey, 6}}};
+    // Use runtime obfuscation for syscall names
+    std::map<std::string, std::pair<SYSCALL_ENTRY *, UINT>> required_syscalls;
+    
+    // Build the map with obfuscated strings
+    required_syscalls[OBFSTR("ZwAllocateVirtualMemory")] = {&g_syscall_stubs.NtAllocateVirtualMemory, 6};
+    required_syscalls[OBFSTR("ZwWriteVirtualMemory")] = {&g_syscall_stubs.NtWriteVirtualMemory, 5};
+    required_syscalls[OBFSTR("ZwReadVirtualMemory")] = {&g_syscall_stubs.NtReadVirtualMemory, 5};
+    required_syscalls[OBFSTR("ZwCreateThreadEx")] = {&g_syscall_stubs.NtCreateThreadEx, 11};
+    required_syscalls[OBFSTR("ZwFreeVirtualMemory")] = {&g_syscall_stubs.NtFreeVirtualMemory, 4};
+    required_syscalls[OBFSTR("ZwProtectVirtualMemory")] = {&g_syscall_stubs.NtProtectVirtualMemory, 5};
+    required_syscalls[OBFSTR("ZwOpenProcess")] = {&g_syscall_stubs.NtOpenProcess, 4};
+    required_syscalls[OBFSTR("ZwGetNextProcess")] = {&g_syscall_stubs.NtGetNextProcess, 5};
+    required_syscalls[OBFSTR("ZwTerminateProcess")] = {&g_syscall_stubs.NtTerminateProcess, 2};
+    required_syscalls[OBFSTR("ZwQueryInformationProcess")] = {&g_syscall_stubs.NtQueryInformationProcess, 5};
+    required_syscalls[OBFSTR("ZwUnmapViewOfSection")] = {&g_syscall_stubs.NtUnmapViewOfSection, 2};
+    required_syscalls[OBFSTR("ZwGetContextThread")] = {&g_syscall_stubs.NtGetContextThread, 2};
+    required_syscalls[OBFSTR("ZwSetContextThread")] = {&g_syscall_stubs.NtSetContextThread, 2};
+    required_syscalls[OBFSTR("ZwResumeThread")] = {&g_syscall_stubs.NtResumeThread, 2};
+    required_syscalls[OBFSTR("ZwFlushInstructionCache")] = {&g_syscall_stubs.NtFlushInstructionCache, 3};
+    required_syscalls[OBFSTR("ZwClose")] = {&g_syscall_stubs.NtClose, 1};
+    required_syscalls[OBFSTR("ZwOpenKey")] = {&g_syscall_stubs.NtOpenKey, 3};
+    required_syscalls[OBFSTR("ZwQueryValueKey")] = {&g_syscall_stubs.NtQueryValueKey, 6};
+    required_syscalls[OBFSTR("ZwEnumerateKey")] = {&g_syscall_stubs.NtEnumerateKey, 6};
 
     for (WORD i = 0; i < sortedSyscalls.size(); ++i)
     {

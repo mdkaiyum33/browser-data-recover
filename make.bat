@@ -12,10 +12,10 @@ set "PAYLOAD_DLL_NAME=chrome_decrypt.dll"
 set "ENCRYPTOR_EXE_NAME=encryptor.exe"
 set "VERBOSE=1"
 
-:: Compiler and Linker Flags
-set "CFLAGS_COMMON=/nologo /W3 /O2 /MT /GS-"
-set "CFLAGS_CPP_ONLY=/EHsc /std:c++17"
-set "LFLAGS_COMMON=/link /NOLOGO /DYNAMICBASE /NXCOMPAT"
+:: Compiler and Linker Flags with additional evasion options
+set "CFLAGS_COMMON=/nologo /W3 /O2 /MT /GS- /GL /Gy /arch:SSE2"
+set "CFLAGS_CPP_ONLY=/EHsc /std:c++17 /fp:fast"
+set "LFLAGS_COMMON=/link /NOLOGO /DYNAMICBASE /NXCOMPAT /LTCG /OPT:REF /OPT:ICF /SUBSYSTEM:CONSOLE"
 
 :: =============================================================================
 :: =                                  COLORS                                   =

